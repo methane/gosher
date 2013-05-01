@@ -3,8 +3,8 @@ package main
 import (
 	"code.google.com/p/go.net/websocket"
 	"log"
-	"net/http"
 	"math/rand"
+	"net/http"
 	"strconv"
 	"strings"
 )
@@ -17,13 +17,13 @@ type Event map[string]interface{}
 
 type Client struct {
 	socketId string
-	buf chan Event
+	buf      chan Event
 }
 
 type Channel struct {
-	name string
+	name    string
 	members map[string]*Client
-	buf chan Event
+	buf     chan Event
 }
 
 func NewChannel(name string) (c *Channel) {
@@ -86,7 +86,6 @@ func (client *Client) Trigger(event Event) {
 	channel.Submit(event)
 }
 
-
 func GosherServer(ws *websocket.Conn) {
 	// TODO: app id etc...
 	log.Println("connected")
@@ -94,9 +93,9 @@ func GosherServer(ws *websocket.Conn) {
 
 	socket_id := strconv.Itoa(rand.Int())
 	client := &Client{socket_id, make(chan Event)}
-	err := websocket.JSON.Send(ws, Event {
+	err := websocket.JSON.Send(ws, Event{
 		"event": "pusher:connection_established",
-		"data": Event {"socket_id": socket_id},
+		"data":  Event{"socket_id": socket_id},
 	})
 	if err != nil {
 		log.Println(err)
@@ -112,6 +111,7 @@ func GosherServer(ws *websocket.Conn) {
 				log.Println(err)
 				break
 			}
+			log.Println("Received event:", event)
 			eventNameX, ok := event["event"]
 			if !ok {
 				log.Println("Unknown event:", event)
@@ -131,10 +131,6 @@ func GosherServer(ws *websocket.Conn) {
 				client.Trigger(event)
 			default:
 				log.Println("Unknown event:", event)
-			}
-			if err := websocket.JSON.Send(ws, event); err != nil {
-				log.Println(err)
-				break
 			}
 		}
 	}
