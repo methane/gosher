@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 // http://pusher.com/docs/auth_signatures
@@ -15,24 +14,6 @@ var debug_key string = "278d425bdf160c739803"
 var debug_secret string = "7ad3773142a6692b25b8"
 
 type Event map[string]interface{}
-
-type App struct {
-	name     string
-	key      string
-	secret   string
-	channels map[string]*Channel
-	mutex    *sync.Mutex
-}
-
-func newApp(name string) *App {
-	return &App{
-		name,
-		debug_key,
-		debug_secret,
-		make(map[string]*Channel),
-		&sync.Mutex{},
-	}
-}
 
 type Client struct {
 	socketId string
@@ -80,92 +61,6 @@ func (client *Client) Send(msg Event) {
 	default:
 		log.Println("Can't send event to", client.socketId, ". Buffer full.")
 	}
-}
-
-type AppRegistory struct {
-	apps  map[string]*App
-	mutex *sync.Mutex
-}
-
-func newAppRegistory() *AppRegistory {
-	return &AppRegistory{
-		make(map[string]*App),
-		&sync.Mutex{},
-	}
-}
-
-var appRegistory *AppRegistory = newAppRegistory()
-
-func (registory *AppRegistory) GetApp(name string) *App {
-	registory.mutex.Lock()
-	defer registory.mutex.Unlock()
-	app, ok := registory.apps[name]
-	if !ok {
-		app = newApp(name)
-		registory.apps[name] = app
-	}
-	return app
-}
-
-type Channel struct {
-	name      string
-	members   map[string]*Client
-	buf       chan Event
-	subscribe chan *Client
-}
-
-func newChannel(name string) *Channel {
-	c := &Channel{
-		name,
-		make(map[string]*Client),
-		make(chan Event, 16),
-		make(chan *Client),
-	}
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Println(r)
-			}
-		}()
-		for {
-			select {
-			case event, ok := <-c.buf:
-				if ok {
-					for _, client := range c.members {
-						client.Send(event)
-					}
-				} else {
-					break
-				}
-			case client := <-c.subscribe:
-				c.members[client.socketId] = client
-			}
-		}
-	}()
-	return c
-}
-
-func (app *App) GetChannel(name string) *Channel {
-	app.mutex.Lock()
-	defer app.mutex.Unlock()
-	c, _ := app.channels[name]
-	return c
-}
-
-func (app *App) Subscribe(client *Client, channelName string) {
-	app.mutex.Lock()
-	defer app.mutex.Unlock()
-
-	channel, ok := app.channels[channelName]
-	if !ok {
-		channel = newChannel(channelName)
-		app.channels[channelName] = channel
-	}
-	channel.subscribe <- client
-}
-
-func (c *Channel) Submit(event Event) {
-	c.buf <- event
 }
 
 // TODO: thread safe
